@@ -60,11 +60,23 @@
           <p class="text-gray-500">点击按钮，让命运决定你的午餐</p>
         </div>
 
+        <!-- 场景切换区域 -->
+        <div class="flex justify-center items-center mb-4">
+          <div id="scene-selector" class="inline-flex rounded-md shadow-sm" role="group">
+            <button type="button" data-scene="宿舍" class="scene-btn active px-6 py-2 text-sm font-medium bg-primary text-white rounded-l-lg hover:bg-red-600 focus:z-10 focus:ring-2 focus:ring-primary">
+              宿舍
+            </button>
+            <button type="button" data-scene="公司" class="scene-btn px-6 py-2 text-sm font-medium bg-gray-200 text-gray-700 rounded-r-lg hover:bg-gray-300 focus:z-10 focus:ring-2 focus:ring-primary">
+              公司
+            </button>           
+          </div>
+        </div>
+        
         <!-- 抽签区域 -->
         <div class="flex justify-center items-center mb-6">
           <div id="draw-area" class="w-full max-w-md bg-gray-100 rounded-lg p-4 text-center">
             <div id="food-count" class="text-base font-medium">
-              当前共有 <span id="count-number">0</span> 种选择
+              <span id="current-scene-name">宿舍</span> 场景共有 <span id="count-number">0</span> 种选择
             </div>
           </div>
         </div>
@@ -134,11 +146,21 @@
 
 
   <script>
-    // 初始化数据
-    const initialFoods = [
-      '沙县', '深夜豆浆', '宿舍泡面', '外卖', '东北饺子', 
-      '陕面', '自选菜', '小摊', '塔斯汀', '大刀饼', '麻辣烫'
-    ];
+    // 场景食谱数据
+    const sceneFoods = {
+      // 宿舍选项
+      '宿舍': [
+        '沙县', '深夜豆浆', '宿舍泡面', '外卖', '东北饺子', 
+        '陕面', '自选菜', '小摊', '塔斯汀', '大刀饼', '麻辣烫'
+      ],
+      // 公司选项
+      '公司': [
+        '自选', '牛肉饭', '煎饼', '烧腊', '鱼粉', '面', '潮牛'
+      ]
+    };
+    
+    // 当前场景
+    let currentScene = '宿舍';
 
     // 结果消息数组
     const resultMessages = [
@@ -164,8 +186,9 @@
     const countNumberEl = document.getElementById('count-number');
 
     // 数据存储
-    let foods = JSON.parse(localStorage.getItem('foods')) || initialFoods;
+    let foods = JSON.parse(localStorage.getItem('foods')) || sceneFoods[currentScene];
     let history = JSON.parse(localStorage.getItem('history')) || [];
+    let userCustomFoods = JSON.parse(localStorage.getItem('userCustomFoods')) || {};
 
     // 初始化页面
     function initPage() {
@@ -176,7 +199,10 @@
     // 渲染食谱列表
     function renderFoodList() {
       foodListEl.innerHTML = '';
-      foods.forEach((food, index) => {
+      
+      // 显示场景预设食谱
+      const presetFoods = sceneFoods[currentScene];
+      presetFoods.forEach((food, index) => {
         const li = document.createElement('li');
         li.className = 'flex items-center justify-between bg-gray-50 p-2 rounded-lg hover:bg-gray-100 transition-all-300';
         
@@ -185,11 +211,11 @@
         nameSpan.className = 'flex-1';
         nameSpan.textContent = food;
         
-        // 创建删除按钮
+        // 创建删除按钮（预设食谱不可删除）
         const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'text-red-500 hover:text-red-700 transition-all-300';
-        deleteBtn.innerHTML = '<i class="fa fa-trash"></i>';
-        deleteBtn.addEventListener('click', () => deleteFood(index));
+        deleteBtn.className = 'text-gray-300 cursor-not-allowed transition-all-300';
+        deleteBtn.innerHTML = '<i class="fa fa-lock"></i>';
+        deleteBtn.title = '预设食谱不可删除';
         
         // 组装元素
         li.appendChild(nameSpan);
@@ -197,8 +223,43 @@
         foodListEl.appendChild(li);
       });
       
+      // 显示用户自定义食谱
+      const customFoods = userCustomFoods[currentScene] || [];
+      if (customFoods.length > 0) {
+        // 添加分隔线
+        const divider = document.createElement('li');
+        divider.className = 'py-1 text-center text-xs text-gray-400';
+        divider.textContent = '自定义食谱';
+        foodListEl.appendChild(divider);
+        
+        customFoods.forEach((food, index) => {
+          const li = document.createElement('li');
+          li.className = 'flex items-center justify-between bg-blue-50 p-2 rounded-lg hover:bg-blue-100 transition-all-300';
+          
+          // 创建食物名称
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'flex-1';
+          nameSpan.textContent = food;
+          
+          // 创建删除按钮
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'text-red-500 hover:text-red-700 transition-all-300';
+          deleteBtn.innerHTML = '<i class="fa fa-trash"></i>';
+          deleteBtn.addEventListener('click', () => deleteCustomFood(index));
+          
+          // 组装元素
+          li.appendChild(nameSpan);
+          li.appendChild(deleteBtn);
+          foodListEl.appendChild(li);
+        });
+      }
+      
+      // 更新当前显示的所有食谱（预设 + 自定义）
+      foods = [...presetFoods, ...customFoods];
+      
       // 更新食物数量显示
       countNumberEl.textContent = foods.length;
+      document.getElementById('current-scene-name').textContent = currentScene;
     }
 
     // 渲染历史记录
@@ -313,15 +374,22 @@
         return;
       }
       
+      // 检查是否已存在（包括预设和自定义）
       if (foods.includes(newFood)) {
         alert('这个食谱已经存在了！');
         return;
       }
       
-      foods.push(newFood);
+      // 获取当前场景的自定义食谱
+      if (!userCustomFoods[currentScene]) {
+        userCustomFoods[currentScene] = [];
+      }
+      
+      // 添加到自定义食谱
+      userCustomFoods[currentScene].push(newFood);
       
       // 保存到本地存储
-      localStorage.setItem('foods', JSON.stringify(foods));
+      localStorage.setItem('userCustomFoods', JSON.stringify(userCustomFoods));
       
       // 更新食谱列表
       renderFoodList();
@@ -330,22 +398,55 @@
       newFoodInput.value = '';
     }
 
-    // 删除食谱
-    function deleteFood(index) {
-      if (confirm('确定要删除这个食谱吗？')) {
-        foods.splice(index, 1);
+    // 删除自定义食谱
+    function deleteCustomFood(index) {
+      if (confirm('确定要删除这个自定义食谱吗？')) {
+        // 获取当前场景的自定义食谱
+        const customFoods = userCustomFoods[currentScene] || [];
+        
+        // 删除指定食谱
+        customFoods.splice(index, 1);
         
         // 保存到本地存储
-        localStorage.setItem('foods', JSON.stringify(foods));
+        localStorage.setItem('userCustomFoods', JSON.stringify(userCustomFoods));
         
         // 更新食谱列表
         renderFoodList();
       }
     }
+    
+    // 切换场景
+    function switchScene(scene) {
+      currentScene = scene;
+      
+      // 更新场景按钮样式
+      document.querySelectorAll('.scene-btn').forEach(btn => {
+        if (btn.dataset.scene === scene) {
+          btn.classList.add('active', 'bg-primary', 'text-white');
+          btn.classList.remove('bg-gray-200', 'text-gray-700');
+        } else {
+          btn.classList.remove('active', 'bg-primary', 'text-white');
+          btn.classList.add('bg-gray-200', 'text-gray-700');
+        }
+      });
+      
+      // 重新渲染食谱列表
+      renderFoodList();
+      
+      // 隐藏结果容器
+      resultContainer.classList.add('hidden');
+    }
 
     // 事件监听
     drawBtn.addEventListener('click', drawFood);
     addFoodBtn.addEventListener('click', addFood);
+    
+    // 场景切换按钮事件
+    document.querySelectorAll('.scene-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchScene(btn.dataset.scene);
+      });
+    });
     
     // 回车添加食谱
     newFoodInput.addEventListener('keypress', (e) => {
